@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>職編權限查詢</title>
+  <style>
+    :root{
+      --bg:#f6f7fb; --card:#fff; --ink:#111827; --muted:#6b7280; --line:#e5e7eb;
+      --ok:#16a34a; --bad:#dc2626; --info:#2563eb; --warn:#f59e0b;
+      --shadow: 0 10px 25px rgba(0,0,0,.08); --radius: 16px;
+      --sans:"Microsoft JhengHei",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      --mono: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:var(--sans);background:var(--bg);color:var(--ink)}
+    header{position:sticky;top:0;z-index:10;background:rgba(246,247,251,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    h1{margin:0;font-size:20px}
+    .sub{margin-top:6px;color:var(--muted);font-size:13px;line-height:1.6}
+
+    .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin-top:14px}
+    .hd{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+    .hd h2{margin:0;font-size:15px}
+    .bd{padding:14px 16px}
+
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:900;border:1px solid var(--line);background:#fff}
+    .pill.info{color:var(--info);border-color:#bfdbfe;background:#eff6ff}
+    .pill.ok{color:var(--ok);border-color:#bbf7d0;background:#f0fdf4}
+    .pill.bad{color:var(--bad);border-color:#fecaca;background:#fef2f2}
+    .pill.warn{color:#92400e;border-color:#fde68a;background:#fffbeb}
+
+    .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .btn{border:1px solid var(--line);background:#fff;padding:10px 12px;border-radius:12px;cursor:pointer;font-weight:900}
+    .btn:hover{border-color:#cbd5e1}
+    .btn.primary{background:#111827;color:#fff;border-color:#111827}
+    .btn.ghost{background:#fff;color:#111827}
+
+    input.txt{
+      width:260px; max-width:100%;
+      padding:10px 12px;border:1px solid var(--line);border-radius:12px;
+      font-family: var(--mono);
+    }
+    input.txt:focus{
+      border-color:#93c5fd;box-shadow:0 0 0 3px rgba(37,99,235,.15);outline:none
+    }
+    .note{border:1px dashed #d1d5db;background:#fcfcff;border-radius:14px;padding:10px 12px;color:var(--muted);font-size:12px;line-height:1.6}
+
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:top}
+    th{text-align:left;background:#fafafa;position:sticky;top:0}
+    .mono{font-family:var(--mono)}
+    .muted{color:var(--muted)}
+    .badTxt{color:var(--bad);font-weight:900}
+    .okTxt{color:var(--ok);font-weight:900}
+    .small{font-size:12px}
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>職編權限查詢</h1>
+    <div class="sub">
+      輸入「單一職編」→ 直接列出此人已開通的所有經費項目權限。<br/>
+      <span class="muted">（不顯示其他人的職編清單，避免資訊外露）</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="card">
+    <div class="hd">
+      <h2>資料來源</h2>
+      <div class="controls">
+        <span class="pill info" id="state">尚未設定 API</span>
+        <button class="btn" id="btnReload" type="button">重新載入</button>
+      </div>
+    </div>
+    <div class="bd">
+      <div class="note">
+        把檔案內的 <span class="mono">API_URL</span> 改成你的 Apps Script Web App URL，存檔後用 Chrome 打開即可。<br/>
+        Google Sheet 欄位：<span class="mono">經費代碼</span>、<span class="mono">經費項目名稱</span>、<span class="mono">職編</span>（職編可用逗號分隔多筆）。
+      </div>
+      <div class="small muted" style="margin-top:10px" id="meta"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="hd">
+      <h2>查詢</h2>
+      <div class="controls">
+        <input id="q" class="txt" placeholder="輸入職編（例如 A12345）" />
+        <button class="btn primary" id="btnSearch" type="button">查詢</button>
+        <span class="pill info" id="summary">—</span>
+      </div>
+    </div>
+    <div class="bd">
+      <div class="note" id="hint">請先設定 API_URL 並按「重新載入」，再查詢。</div>
+
+      <div style="margin-top:12px; overflow:auto; border:1px solid var(--line); border-radius:14px;">
+        <table>
+          <thead>
+            <tr>
+              <th style="min-width:220px;">經費代碼</th>
+              <th style="min-width:650px;">經費項目名稱</th>
+              <th style="min-width:140px;">狀態</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="3" class="muted small">尚未查詢。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+/** ✅把這個改成你的 Web App URL */
+const API_URL = "https://script.google.com/macros/s/AKfycbyun1Cu7HUhMkp0W2_JTepVSg_bsTJOeZ_bsa6lZSlKTgeDUGFyFx-keZa8NlEoo-J1/exec";
+
+const COL = { code:"經費代碼", name:"經費項目名稱", emp:"職編" };
+const $ = (id)=>document.getElementById(id);
+
+function setState(text, kind){
+  const el=$('state');
+  el.textContent=text;
+  el.className='pill ' + (kind||'info');
+}
+function escapeHtml(s){
+  return String(s ?? '')
+    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+    .replaceAll('"','&quot;').replaceAll("'","&#039;");
+}
+function normalizeEmpToken(x){
+  let s = String(x ?? '').trim();
+  if(!s) return '';
+  s = s.replace(/\.0$/, '');
+  s = s.replace(/\s+/g,'');
+  s = s.toUpperCase();
+  return s;
+}
+function splitEmpList(cell){
+  const s = String(cell ?? '');
+  return s.split(/[,\n，;；、\s]+/g).map(normalizeEmpToken).filter(Boolean);
+}
+
+let INDEX = []; // [{code,name,emps}...]
+
+function buildIndex(raw){
+  const out = [];
+  for(const r of raw){
+    const code = String(r[COL.code] ?? '').trim();
+    const name = String(r[COL.name] ?? '').trim();
+    const emps = splitEmpList(r[COL.emp]);
+    if(!code && !name) continue;
+    out.push({ code, name, emps });
+  }
+  return out;
+}
+
+async function loadFromAPI(){
+  if(!API_URL || API_URL.includes("PASTE_YOUR_WEB_APP_URL_HERE")){
+    setState("尚未設定 API_URL", "warn");
+    $('hint').innerHTML = `請先把 <span class="mono">API_URL</span> 換成你的 Web App URL。`;
+    return false;
+  }
+  setState("載入中…", "info");
+  try{
+    const res = await fetch(API_URL, { cache:"no-store" });
+    if(!res.ok) throw new Error("HTTP " + res.status);
+    const json = await res.json();
+    const raw = Array.isArray(json.data) ? json.data : [];
+    INDEX = buildIndex(raw);
+
+    $('meta').innerHTML = `資料筆數：${INDEX.length}｜來源：${escapeHtml(json.sheetName || '')}｜更新：${escapeHtml(json.updatedAt || '')}`;
+    setState("已載入", "ok");
+    $('hint').textContent = "已載入資料。輸入單一職編即可查詢。";
+    return true;
+  }catch(err){
+    setState("載入失敗", "bad");
+    $('hint').innerHTML = `<span class="badTxt">載入失敗：</span>${escapeHtml(String(err))}<br/>請確認 Web App 權限與 URL。`;
+    return false;
+  }
+}
+
+function renderRows(list){
+  const tb = $('tbody');
+  tb.innerHTML = '';
+  if(!list.length){
+    tb.innerHTML = `<tr><td colspan="3" class="muted small">查不到（可能尚未開通或職編輸入錯誤）。</td></tr>`;
+    return;
+  }
+  for(const rec of list){
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono">${escapeHtml(rec.code)}</td>
+      <td>${escapeHtml(rec.name)}</td>
+      <td><span class="okTxt">已開通</span></td>
+    `;
+    tb.appendChild(tr);
+  }
+}
+
+function doSearch(){
+  const q = normalizeEmpToken($('q').value);
+  if(!INDEX.length){
+    $('hint').innerHTML = `<span class="badTxt">尚未載入資料</span>，請先按「重新載入」。`;
+    return;
+  }
+  if(!q){
+    $('hint').textContent = "請輸入單一職編（例如 A12345）。";
+    $('summary').textContent = "—";
+    renderRows([]);
+    return;
+  }
+  // 只允許單一職編（如果有人貼一串，就取第一個，避免奇怪行為）
+  const emp = splitEmpList(q)[0] || q;
+
+// 記住上次查詢（不含任何權限資料，只存職編）
+try{ localStorage.setItem(LAST_EMP_KEY, emp); }catch(e){}
+
+  const matches = INDEX.filter(r => r.emps.includes(emp));
+
+  $('summary').textContent = `職編 ${emp}：已開通 ${matches.length} 筆`;
+  $('summary').className = 'pill ' + (matches.length ? 'ok' : 'bad');
+
+  $('hint').innerHTML = matches.length
+    ? `<span class="okTxt">查到了！</span> 下方就是此職編已開通的權限清單。`
+    : `<span class="badTxt">查不到</span>（可能尚未開通或職編輸入錯誤）。`;
+
+  renderRows(matches);
+}
+
+$('btnReload').addEventListener('click', loadFromAPI);
+$('btnSearch').addEventListener('click', doSearch);
+$('q').addEventListener('keydown', (e)=>{ if(e.key==='Enter') doSearch(); });
+
+// boot
+setState("尚未載入", "info");
+
+const LAST_EMP_KEY = "perm_last_emp_v1";
+
+// 自動載入：如果你已經填好 API_URL，打開頁面就會抓最新資料
+(async function autoBoot(){
+  if(API_URL && !API_URL.includes("PASTE_YOUR_WEB_APP_URL_HERE")){
+    await loadFromAPI();
+    // 自動帶入上次查詢的職編（可刪掉這段也不影響功能）
+    try{
+      const last = localStorage.getItem(LAST_EMP_KEY) || "";
+      if(last){
+        $('q').value = last;
+        doSearch();
+      }
+    }catch(e){}
+  }
+})();
+</script>
+</body>
+</html>
